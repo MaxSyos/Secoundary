@@ -146,10 +146,12 @@ async function pullBack() {
 
 pullBack();
 
+setInterval(pullBack, config.CRAWLER_INTERVAL);
+
 module.exports = { pullBack };
 
 app.listen(port, () => {
     console.log(`Servidor iniciado na porta: ${port}`);
 });
 
-setInterval(pullBack, config.CRAWLER_INTERVAL);
+
