@@ -106,16 +106,16 @@ async function pullBack() {
         console.log(`Última venda em ${trades.find(trades => trades.side === 'sell').price} no tempo ${groundZero}`);
     }
 
-    /* ESTATÉGIAS , CONDIÇÕES E ORDENS  */
-    if (currentCandle > tstamp && close[3] < open[3] && close[2] < open[2] && close[1] > open[1] && ((close[1] - open[1]) > (open[1] - low[1]))) {
-        console.log("Compra ADA3L")
-        var buy = exchange.createMarketBuyOrder('ADA3L/USDT', amountUSDT);
-    }
+    // /* ESTATÉGIAS , CONDIÇÕES E ORDENS  */
+    // if (currentCandle > tstamp && close[3] < open[3] && close[2] < open[2] && close[1] > open[1] && ((close[1] - open[1]) > (open[1] - low[1]))) {
+    //     console.log("Compra ADA3L")
+    //     var buy = exchange.createMarketBuyOrder('ADA3L/USDT', amountUSDT);
+    // }
 
-    if (comprado && ((close[0] >= Profit) && ativo === 'ADA3L/USDT' && lado === 'buy')) {
-        console.log("Fechamento do trade")
-        var sell = exchange.createMarketSellOrder('ADA3L/USDT', ADA3LTotal);
-    }
+    // if (comprado && ((close[0] >= Profit) && ativo === 'ADA3L/USDT' && lado === 'buy')) {
+    //     console.log("Fechamento do trade")
+    //     var sell = exchange.createMarketSellOrder('ADA3L/USDT', ADA3LTotal);
+    // }
 
     const ultimoCandle = `${currentCandle}`
     const ultimaVenda = `${groundZero}`
