@@ -7,7 +7,7 @@ const express = require('express');
 const cors = require('cors');
 
 const app = express();
-const port = process.env.PORT || 3001 ;
+const port = process.env.PORT || 3001;
 
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
@@ -18,7 +18,7 @@ app.use((req, res, next) => {
 });
 
 async function pullBack() {
-     
+
     console.log('');
 
     /* SYSTEM */
@@ -52,8 +52,9 @@ async function pullBack() {
     const USDTTotal = saldo.total['USDT'];
     const USDTFree = saldo.free['USDT'];
     const ADA3LTotal = saldo.total['ADA3L'];
+    const ADA3STotal = saldo.total['ADA3S'];
     const BTCtotal = saldo.total['BTC'];
-    const amountUSDT = (0.6/close[0])
+    const amountUSDT = (0.6 / close[0])
 
     /* CRIAÇÃO DE PROFITS */
     const trades = (await exchange.fetchMyTrades('ADA3L/USDT')).reverse();
@@ -79,7 +80,7 @@ async function pullBack() {
 
     /* MOMENTO DO TRADE */
     const timer = (1000 * 60 * 15);
-    const tstamp = ((trades[0].timestamp)+timer);
+    const tstamp = ((trades[0].timestamp) + timer);
     const current = (data.map(candle => (candle[0]))).reverse();
     const currentCandle = current[0]
 
@@ -98,7 +99,7 @@ async function pullBack() {
 
     if (lado === "buy" && ativo === 'ADA3L/USDT' && (0.999999 < (ADA3LTotal * close[0]))) {
         comprado = true;
-        console.log(`Comprado em ${config.SYMBOL} no preço ${medianPrice} ` );
+        console.log(`Comprado em ${config.SYMBOL} no preço ${medianPrice} `);
         console.log(`Profit em ${Profit}`);
 
     } else {
@@ -106,7 +107,7 @@ async function pullBack() {
     }
 
     /* ESTATÉGIAS , CONDIÇÕES E ORDENS  */
-    if (currentCandle>tstamp && close[3] < open[3] && close[2] < open[2] && close[1] > open[1] && ((close[1] - open[1]) > (open[1] - low[1]))) {
+    if (currentCandle > tstamp && close[3] < open[3] && close[2] < open[2] && close[1] > open[1] && ((close[1] - open[1]) > (open[1] - low[1]))) {
         console.log("Compra ADA3L")
         var buy = exchange.createMarketBuyOrder('ADA3L/USDT', amountUSDT);
     }
@@ -120,13 +121,23 @@ async function pullBack() {
     const ultimaVenda = `${groundZero}`
     const ultimoCompra = `${point[0].price}`
     const horaCompra = `${point[0].timestamp}`
-    const estado = comprado ? `Está comprado em ADA3L e o profit em ${Profit}` : 'Está esperando oportunidade';
+    const estado3L = comprado ? `Está comprado em ADA3L e o profit em ${Profit}` : 'Está esperando oportunidade';
+    const estado3S = comprado ? 'Está esperando oportunidade' : `Está comprado em ADA3S e o profit em ${Profit}`;
+    const counter = trades.filter(trades => trades.side === 'sell').length
+    const USDTADA3L = (ADA3LTotal * close[0])
+    const closeADA3L = close[0]
+    const soma = USDTTotal + USDTADA3L
 
-    app.get('/', async(req, res) => {
+    app.get('/', async (req, res) => {
         return res.json({
             erro: false,
             datahome: {
-                estado
+                estado3L,
+                estado3S,
+                counter,
+                USDTADA3L,
+                closeADA3L,
+                soma,
             }
         });
     });
@@ -135,7 +146,7 @@ async function pullBack() {
 
 pullBack();
 
-module.exports =  { pullBack } ;
+module.exports = { pullBack };
 
 app.listen(port, () => {
     console.log(`Servidor iniciado na porta: ${port}`);
