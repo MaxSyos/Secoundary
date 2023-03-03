@@ -1,48 +1,144 @@
-import express from 'express'
-import * as dotenv from 'dotenv'
-import cors from 'cors'
-import { Configuration, OpenAIApi } from 'openai'
+var ccxt = require('ccxt');
+var config = require('./config');
+var ta = require('ta.js')
+const https = require('https');
+const axios = require('axios');
+const express = require('express');
+const cors = require('cors');
 
-dotenv.config()
+const app = express();
+const port = process.env.PORT || 3001 ;
 
-const configuration = new Configuration({
-  apiKey: process.env.OPENAI_API_KEY,
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE");
+    res.header("Access-Control-Allow-Headers", "X-PINGOTHER, Content-Type, Authorization");
+    app.use(cors());
+    next();
 });
 
-const openai = new OpenAIApi(configuration);
+async function pullBack() {
+     
+    console.log('');
 
-const app = express()
-app.use(cors())
-app.use(express.json())
-
-app.get('/', async (req, res) => {
-  res.status(200).send({
-    message: 'Hello from CodeX!'
-  })
-})
-
-app.post('/', async (req, res) => {
-  try {
-    const prompt = req.body.prompt;
-
-    const response = await openai.createCompletion({
-      model: "text-davinci-003",
-      prompt: `${prompt}`,
-      temperature: 0, // Higher values means the model will take more risks.
-      max_tokens: 3000, // The maximum number of tokens to generate in the completion. Most models have a context length of 2048 tokens (except for the newest models, which support 4096).
-      top_p: 1, // alternative to sampling with temperature, called nucleus sampling
-      frequency_penalty: 0.5, // Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
-      presence_penalty: 0, // Number between -2.0 and 2.0. Positive values penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.
+    /* SYSTEM */
+    var exchange = new ccxt.kucoin({
+        'apiKey': config.API_KEY,
+        'secret': config.SECRET_KEY,
+        'password': config.PASSWORD,
+        'uid': config.UID
     });
 
-    res.status(200).send({
-      bot: response.data.choices[0].text
+    let comprado = false;
+
+    /* DADOS */
+    const mercado = await exchange.load_markets();
+    const data = (await exchange.fetchOHLCV(config.SYMBOL, '15m'));
+
+
+    /* ACESSANDO CANDLES OHLC BCHBEAR/USD */
+    const open = (data.map(candleO => (candleO[1]))).reverse();
+    const high = (data.map(candleH => (candleH[2]))).reverse();
+    const low = (data.map(candleL => (candleL[3]))).reverse();
+    const close = (data.map(candleC => (candleC[4]))).reverse();
+
+    /* MÉDIAS DE MÓVEIS */
+    const fastMedian = await ta.sma(low, 88);
+    const slowMedian = await ta.sma(high, 100);
+    const threeMedian = await ta.sma(high, 3);
+
+    /* CONVERÇÃO DE MOEDAS */
+    const saldo = await exchange.fetchBalance();
+    const USDTTotal = saldo.total['USDT'];
+    const USDTFree = saldo.free['USDT'];
+    const ADA3LTotal = saldo.total['ADA3L'];
+    const BTCtotal = saldo.total['BTC'];
+    const amountUSDT = (0.6/close[0])
+
+    /* CRIAÇÃO DE PROFITS */
+    const trades = (await exchange.fetchMyTrades('ADA3L/USDT')).reverse();
+    const groundZero = trades.find(trades => trades.side === 'sell').timestamp
+    const point = trades.filter(trades => trades.side === 'buy')
+    const amount = point.filter(trades => trades.timestamp > groundZero)
+    const setPrice = amount.map(amount => amount.price)
+    const n = setPrice.length;
+    let sum = 0;
+
+    for (var i = 0; i < setPrice.length; i++) {
+        sum += setPrice[i];
+    }
+
+    const medianPrice = sum / n
+
+    const Profit = (medianPrice * 1.025);
+
+
+    /* CRUZAMENTO DE MEDIAS */
+    const crossover = (fastMedian[1] > slowMedian[1] && fastMedian[2] < slowMedian[2]);
+    const crossunder = (fastMedian[1] < slowMedian[1] && fastMedian[2] > slowMedian[2]);
+
+    /* MOMENTO DO TRADE */
+    const timer = (1000 * 60 * 15);
+    const tstamp = ((trades[0].timestamp)+timer);
+    const current = (data.map(candle => (candle[0]))).reverse();
+    const currentCandle = current[0]
+
+    /* REGISTRO DE MAREGM LIVRE */
+    const lado = trades[0].side;
+    const ativo = trades[0].symbol;
+    const bodyTrade = {
+        orderId: trades[0].order,
+        symbol: trades[0].symbol,
+        side: trades[0].side,
+        quantity: trades[0].amount,
+        priceUSD: trades[0].price,
+        timestamp: trades[0].timestamp,
+        moment: trades[0].datetime,
+    }
+
+    if (lado === "buy" && ativo === 'ADA3L/USDT' && (0.999999 < (ADA3LTotal * close[0]))) {
+        comprado = true;
+        console.log(`Comprado em ${config.SYMBOL} no preço ${medianPrice} ` );
+        console.log(`Profit em ${Profit}`);
+
+    } else {
+        console.log(`Última venda em ${trades.find(trades => trades.side === 'sell').price} no tempo ${groundZero}`);
+    }
+
+    /* ESTATÉGIAS , CONDIÇÕES E ORDENS  */
+    if (currentCandle>tstamp && close[3] < open[3] && close[2] < open[2] && close[1] > open[1] && ((close[1] - open[1]) > (open[1] - low[1]))) {
+        console.log("Compra ADA3L")
+        var buy = exchange.createMarketBuyOrder('ADA3L/USDT', amountUSDT);
+    }
+
+    if (comprado && ((close[0] >= Profit) && ativo === 'ADA3L/USDT' && lado === 'buy')) {
+        console.log("Fechamento do trade")
+        var sell = exchange.createMarketSellOrder('ADA3L/USDT', ADA3LTotal);
+    }
+
+    const ultimoCandle = `${currentCandle}`
+    const ultimaVenda = `${groundZero}`
+    const ultimoCompra = `${point[0].price}`
+    const horaCompra = `${point[0].timestamp}`
+    const estado = comprado ? `Está comprado em ADA3L e o profit em ${Profit}` : 'Está esperando oportunidade';
+
+    app.get('/', async(req, res) => {
+        return res.json({
+            erro: false,
+            datahome: {
+                estado
+            }
+        });
     });
 
-  } catch (error) {
-    console.error(error)
-    res.status(500).send(error || 'Something went wrong');
-  }
-})
+}
 
-app.listen(5000, () => console.log('AI server started on http://localhost:5000'))
+pullBack();
+
+module.exports =  { pullBack } ;
+
+app.listen(port, () => {
+    console.log(`Servidor iniciado na porta: ${port}`);
+});
+
+setInterval(pullBack, config.CRAWLER_INTERVAL);
